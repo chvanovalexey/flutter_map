@@ -78,3 +78,10 @@ pubspec.lock
 
 # Coverage files
 coverage/
+/example/macos
+/example/windows
+/example/windows
+/example/macos
+/example/windows
+/example/windows/flutter
+/example/windows

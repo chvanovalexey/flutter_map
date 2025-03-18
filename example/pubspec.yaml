@@ -75,3 +75,4 @@ flutter:
     - assets/map/anholt_osmbright/14/8727/
     - assets/mapbox-logo-white.png
     - assets/
+    - assets/sample-geojson/

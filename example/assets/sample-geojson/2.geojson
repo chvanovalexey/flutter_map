@@ -1,0 +1,594 @@
+{
+  "type": "FeatureCollection",
+  "calcInfo": {
+    "resolution": 100,
+    "smoothed": true,
+    "smoothIterations": 1,
+    "smoothFactor": 0.5,
+    "computationTimeMs": 19,
+    "memoryUsage": {
+      "memoryStart": 19.16,
+      "memoryEnd": 19.36,
+      "memoryDelta": 0.2
+    }
+  },
+  "routeInfo": {
+    "totalDistance": 14800.9,
+    "unit": "kilometers",
+    "estimatedTime": 673,
+    "usedPaths": {},
+    "segments": [
+      {
+        "from": "departurePort",
+        "to": "currentPosition",
+        "distance": 4383.9,
+        "segmentType": "past"
+      },
+      {
+        "from": "currentPosition",
+        "to": "intermediatePort",
+        "distance": 5526.1,
+        "segmentType": "future"
+      },
+      {
+        "from": "intermediatePort",
+        "to": "destinationPort",
+        "distance": 4890.9,
+        "segmentType": "future"
+      }
+    ]
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "point": "departurePort",
+        "name": "Singapore",
+        "pointType": "departurePort",
+        "marker-size": "large",
+        "title": "Singapore",
+        "marker-symbol": "harbor",
+        "marker-color": "#3bb2d0",
+        "description": "Порт отправления"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          113.85,
+          1.29
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "point": "currentPosition",
+        "name": "Current Container Position",
+        "pointType": "currentPosition",
+        "marker-size": "large",
+        "title": "Current Container Position",
+        "marker-symbol": "ferry",
+        "marker-color": "#e55e5e",
+        "description": "Текущее положение"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          138,
+          12
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "point": "intermediatePort1",
+        "sequenceNumber": 1,
+        "name": "Manila",
+        "pointType": "intermediatePort",
+        "marker-size": "medium",
+        "title": "Manila",
+        "marker-symbol": "harbor",
+        "marker-color": "#8a8acb",
+        "description": "Промежуточный порт"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          100.98,
+          14.58
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "point": "destinationPort",
+        "name": "Hong Kong",
+        "pointType": "destinationPort",
+        "marker-size": "large",
+        "title": "Hong Kong",
+        "marker-symbol": "harbor",
+        "marker-color": "#3bb2d0",
+        "description": "Порт назначения"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          134.17,
+          22.28
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "route",
+        "segmentType": "past",
+        "from": "departurePort",
+        "to": "currentPosition",
+        "distance": 4383.9,
+        "stroke": "#3bb2d0",
+        "stroke-width": 4,
+        "stroke-opacity": 0.8,
+        "title": "Маршрут: departurePort → currentPosition",
+        "description": "Расстояние: 4383.9 км"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            113.85,
+            1.29
+          ],
+          [
+            112.3775,
+            1.4675
+          ],
+          [
+            112.3775,
+            1.4675
+          ],
+          [
+            110.35249999999999,
+            2.6725000000000003
+          ],
+          [
+            110.35249999999999,
+            2.6725000000000003
+          ],
+          [
+            111.82249999999999,
+            4.8075
+          ],
+          [
+            111.82249999999999,
+            4.8075
+          ],
+          [
+            114.1625,
+            6.157500000000001
+          ],
+          [
+            114.1625,
+            6.157500000000001
+          ],
+          [
+            117.265,
+            7.4
+          ],
+          [
+            117.265,
+            7.4
+          ],
+          [
+            120.4,
+            8.465
+          ],
+          [
+            120.4,
+            8.465
+          ],
+          [
+            121.255,
+            8.625
+          ],
+          [
+            121.255,
+            8.625
+          ],
+          [
+            124.08000000000001,
+            9.61
+          ],
+          [
+            124.08000000000001,
+            9.61
+          ],
+          [
+            128.2,
+            10.25
+          ],
+          [
+            128.2,
+            10.25
+          ],
+          [
+            135,
+            10
+          ],
+          [
+            135,
+            10
+          ],
+          [
+            139,
+            11
+          ],
+          [
+            139,
+            11
+          ],
+          [
+            138,
+            12
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "route",
+        "segmentType": "future",
+        "from": "currentPosition",
+        "to": "intermediatePort",
+        "distance": 5526.1,
+        "stroke": "#8a8acb",
+        "stroke-width": 2,
+        "stroke-opacity": 0.6,
+        "dash-array": "5,5",
+        "title": "Маршрут: currentPosition → intermediatePort",
+        "description": "Расстояние: 5526.1 км"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            138,
+            12
+          ],
+          [
+            139,
+            11
+          ],
+          [
+            139,
+            11
+          ],
+          [
+            135,
+            10
+          ],
+          [
+            135,
+            10
+          ],
+          [
+            128.2,
+            10.25
+          ],
+          [
+            128.2,
+            10.25
+          ],
+          [
+            126.05000000000001,
+            11.95
+          ],
+          [
+            126.05000000000001,
+            11.95
+          ],
+          [
+            124.85,
+            13
+          ],
+          [
+            124.85,
+            13
+          ],
+          [
+            123.05,
+            12.8
+          ],
+          [
+            123.05,
+            12.8
+          ],
+          [
+            121.00343749999999,
+            13.58421875
+          ],
+          [
+            121.00343749999999,
+            13.58421875
+          ],
+          [
+            117.4759375,
+            13.76421875
+          ],
+          [
+            117.4759375,
+            13.76421875
+          ],
+          [
+            113.2625,
+            12.942499999999999
+          ],
+          [
+            113.2625,
+            12.942499999999999
+          ],
+          [
+            110.89011718750001,
+            12.3492578125
+          ],
+          [
+            110.89011718750001,
+            12.3492578125
+          ],
+          [
+            108.7938671875,
+            11.081757812500001
+          ],
+          [
+            108.7938671875,
+            11.081757812500001
+          ],
+          [
+            106.09125,
+            9.16
+          ],
+          [
+            106.09125,
+            9.16
+          ],
+          [
+            104.13,
+            9.4225
+          ],
+          [
+            104.13,
+            9.4225
+          ],
+          [
+            101.8825,
+            11.7575
+          ],
+          [
+            101.8825,
+            11.7575
+          ],
+          [
+            100.45,
+            13.370000000000001
+          ],
+          [
+            100.45,
+            13.370000000000001
+          ],
+          [
+            100.495,
+            13.745000000000001
+          ],
+          [
+            100.495,
+            13.745000000000001
+          ],
+          [
+            100.735,
+            14.165
+          ],
+          [
+            100.735,
+            14.165
+          ],
+          [
+            100.98,
+            14.58
+          ]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "type": "route",
+        "segmentType": "future",
+        "from": "intermediatePort",
+        "to": "destinationPort",
+        "distance": 4890.9,
+        "stroke": "#8a8acb",
+        "stroke-width": 2,
+        "stroke-opacity": 0.6,
+        "dash-array": "5,5",
+        "title": "Маршрут: intermediatePort → destinationPort",
+        "description": "Расстояние: 4890.9 км"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            100.98,
+            14.58
+          ],
+          [
+            100.735,
+            14.165
+          ],
+          [
+            100.735,
+            14.165
+          ],
+          [
+            100.495,
+            13.745000000000001
+          ],
+          [
+            100.495,
+            13.745000000000001
+          ],
+          [
+            100.45,
+            13.370000000000001
+          ],
+          [
+            100.45,
+            13.370000000000001
+          ],
+          [
+            101.8825,
+            11.7575
+          ],
+          [
+            101.8825,
+            11.7575
+          ],
+          [
+            104.13,
+            9.4225
+          ],
+          [
+            104.13,
+            9.4225
+          ],
+          [
+            106.09125,
+            9.16
+          ],
+          [
+            106.09125,
+            9.16
+          ],
+          [
+            108.7938671875,
+            11.081757812500001
+          ],
+          [
+            108.7938671875,
+            11.081757812500001
+          ],
+          [
+            110.89011718750001,
+            12.3492578125
+          ],
+          [
+            110.89011718750001,
+            12.3492578125
+          ],
+          [
+            113.2625,
+            12.942499999999999
+          ],
+          [
+            113.2625,
+            12.942499999999999
+          ],
+          [
+            116.60249999999999,
+            15.135
+          ],
+          [
+            116.60249999999999,
+            15.135
+          ],
+          [
+            118.3575,
+            17.1325
+          ],
+          [
+            118.3575,
+            17.1325
+          ],
+          [
+            119.06,
+            17.93
+          ],
+          [
+            119.06,
+            17.93
+          ],
+          [
+            119.688125,
+            18.761249999999997
+          ],
+          [
+            119.688125,
+            18.761249999999997
+          ],
+          [
+            121.405625,
+            19.00875
+          ],
+          [
+            121.405625,
+            19.00875
+          ],
+          [
+            123.8425,
+            19.119999999999997
+          ],
+          [
+            123.8425,
+            19.119999999999997
+          ],
+          [
+            125.7525,
+            19.3925
+          ],
+          [
+            125.7525,
+            19.3925
+          ],
+          [
+            128.41,
+            19.7725
+          ],
+          [
+            128.41,
+            19.7725
+          ],
+          [
+            132.10750000000002,
+            20.03
+          ],
+          [
+            132.10750000000002,
+            20.03
+          ],
+          [
+            134.93,
+            20.57
+          ],
+          [
+            134.93,
+            20.57
+          ],
+          [
+            134.9075,
+            21.68
+          ],
+          [
+            134.9075,
+            21.68
+          ],
+          [
+            134.17,
+            22.28
+          ]
+        ]
+      }
+    }
+  ]
+}
