@@ -42,11 +42,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   bool _showLinesLayer = true;
   bool _showLayersPanel = false;
   
+  // Информация о загруженных маршрутах
+  final Map<String, bool> _routeVisibility = {};
+  final Map<String, List<Marker>> _routeMarkers = {};
+  final Map<String, List<Polyline>> _routePolylines = {};
+  final List<String> _routeNames = [];
+  
+  // Информация о прогрессе загрузки
+  int _totalRoutes = 0;
+  int _loadedRoutes = 0;
+  String _currentLoadingRoute = '';
+  
+  // Переменные для отслеживания общего состояния маршрутов
+  bool _allRoutesVisible = true;
+  
+  late final MapController _mapController;
+  
+  // Дополнительные переменные для управления отображением
+  bool _sortRoutesReverseOrder = false;
+  
   @override
   void initState() {
     super.initState();
+    _mapController = MapController();
     showIntroDialogIfNeeded();
-    loadContainerRoute();
+    loadAllRoutes();
     
     // Инициализация тикера для отслеживания производительности
     _stopwatch.start();
@@ -58,6 +78,246 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     _ticker.dispose();
     _stopwatch.stop();
     super.dispose();
+  }
+  
+  // Загрузка всех GeoJSON маршрутов из папки assets/sample-geojson/
+  Future<void> loadAllRoutes() async {
+    try {
+      setState(() {
+        isLoading = true;
+        error = null;
+      });
+      
+      // Загружаем список всех доступных файлов через AssetManifest
+      final manifestContent = await rootBundle.loadString('AssetManifest.json');
+      final Map<String, dynamic> manifestMap = json.decode(manifestContent) as Map<String, dynamic>;
+      
+      // Фильтруем только geojson файлы из нужной директории
+      final geoJsonFiles = manifestMap.keys
+          .where((key) => key.startsWith('assets/sample-geojson/') && key.endsWith('.geojson'))
+          .toList();
+      
+      // Сортируем файлы по имени для более предсказуемого порядка
+      geoJsonFiles.sort();
+      
+      // Устанавливаем общее количество маршрутов для прогресса
+      setState(() {
+        _totalRoutes = geoJsonFiles.length;
+        _loadedRoutes = 0;
+      });
+      
+      // Размер пакета для загрузки маршрутов (сколько маршрутов обрабатывать параллельно)
+      const batchSize = 5;
+      
+      // Загружаем файлы пакетами для улучшения производительности
+      for (var i = 0; i < geoJsonFiles.length; i += batchSize) {
+        final end = (i + batchSize < geoJsonFiles.length) ? i + batchSize : geoJsonFiles.length;
+        final batch = geoJsonFiles.sublist(i, end);
+        
+        // Загружаем пакет файлов параллельно
+        await Future.wait(
+          batch.map((filePath) async {
+            // Получаем имя файла без пути и расширения
+            final fileName = filePath.split('/').last;
+            final routeName = fileName.replaceAll('.geojson', '');
+            
+            setState(() {
+              _routeNames.add(routeName);
+              _routeVisibility[routeName] = true;
+              _currentLoadingRoute = 'Маршрут $routeName';
+            });
+            
+            await loadRouteFromFile(filePath, routeName);
+            
+            setState(() {
+              _loadedRoutes++;
+            });
+          }),
+        );
+        
+        // Обновляем видимые маркеры и полилинии после каждого пакета
+        updateVisibleMarkersAndPolylines();
+      }
+      
+      setState(() {
+        isLoading = false;
+        _currentLoadingRoute = '';
+      });
+    } catch (e) {
+      setState(() {
+        isLoading = false;
+        error = 'Ошибка загрузки маршрутов: $e';
+      });
+      print('Error loading GeoJSON routes: $e');
+    }
+  }
+  
+  // Обновление общих списков маркеров и линий на основе видимости маршрутов
+  void updateVisibleMarkersAndPolylines() {
+    final List<Marker> allMarkers = [];
+    final List<Polyline> allPolylines = [];
+    
+    bool anyRouteVisible = false;
+    
+    for (final routeName in _routeNames) {
+      if (_routeVisibility[routeName] == true) {
+        allMarkers.addAll(_routeMarkers[routeName] ?? []);
+        allPolylines.addAll(_routePolylines[routeName] ?? []);
+        anyRouteVisible = true;
+      }
+    }
+    
+    // Обновляем состояние общей видимости
+    _allRoutesVisible = anyRouteVisible;
+    
+    setState(() {
+      markers = allMarkers;
+      polylines = allPolylines;
+    });
+  }
+  
+  // Загрузка маршрута из конкретного файла
+  Future<void> loadRouteFromFile(String filePath, String routeName) async {
+    try {
+      final geoJsonString = await rootBundle.loadString(filePath);
+      final geoJson = jsonDecode(geoJsonString);
+      
+      final List<Marker> loadedMarkers = [];
+      final List<Polyline> loadedPolylines = [];
+      
+      // Получаем цвет для этого маршрута
+      final routeColor = _getRouteColor(routeName);
+      
+      // Обрабатываем "features" из GeoJSON
+      final features = geoJson['features'] as List;
+      
+      for (final feature in features) {
+        final geometry = feature['geometry'] as Map<String, dynamic>;
+        final properties = feature['properties'] as Map<String, dynamic>;
+        final type = geometry['type'] as String;
+        
+        // Обрабатываем точки для создания маркеров
+        if (type == 'Point') {
+          final coordinates = geometry['coordinates'] as List;
+          final lng = coordinates[0] as num;
+          final lat = coordinates[1] as num;
+          
+          // Используем цвет маршрута, если не указан другой цвет
+          final markerColor = properties['marker-color'] != null 
+              ? _colorFromHex(properties['marker-color'].toString()) 
+              : routeColor;
+          
+          loadedMarkers.add(
+            Marker(
+              point: LatLng(lat.toDouble(), lng.toDouble()),
+              width: 60,
+              height: 70,
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.3),
+                          blurRadius: 5,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                      border: Border.all(
+                        color: markerColor,
+                        width: 2,
+                      ),
+                    ),
+                    child: Icon(
+                      properties['marker-symbol'] == 'harbor' 
+                          ? Icons.anchor 
+                          : Icons.directions_boat,
+                      color: markerColor,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        properties['name']?.toString() ?? '',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                        textAlign: TextAlign.center,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        
+        // Обрабатываем линии
+        else if (type == 'LineString') {
+          final coordinates = geometry['coordinates'] as List;
+          final List<LatLng> points = [];
+          
+          for (final coord in coordinates) {
+            final lng = (coord[0] as num).toDouble();
+            final lat = (coord[1] as num).toDouble();
+            points.add(LatLng(lat, lng));
+          }
+          
+          // Определяем стиль линии по свойствам или используем цвет маршрута
+          final strokeWidth = double.tryParse(properties['stroke-width']?.toString() ?? '3.0') ?? 3.0;
+          final color = properties['stroke'] != null 
+              ? _colorFromHex(properties['stroke'].toString()) 
+              : routeColor;
+          final bool isDashed = properties['dash-array'] != null;
+          
+          // Создаем полилинию с или без паттерна в зависимости от isDashed
+          if (isDashed) {
+            loadedPolylines.add(
+              Polyline(
+                points: points,
+                strokeWidth: strokeWidth,
+                color: color,
+                pattern: const StrokePattern.dotted(),
+              ),
+            );
+          } else {
+            loadedPolylines.add(
+              Polyline(
+                points: points,
+                strokeWidth: strokeWidth,
+                color: color,
+              ),
+            );
+          }
+        }
+      }
+      
+      // Сохраняем загруженные данные под именем маршрута
+      _routeMarkers[routeName] = loadedMarkers;
+      _routePolylines[routeName] = loadedPolylines;
+      
+    } catch (e) {
+      print('Error loading route $routeName: $e');
+      // В случае ошибки просто создаём пустые списки для этого маршрута
+      _routeMarkers[routeName] = [];
+      _routePolylines[routeName] = [];
+    }
   }
   
   // Обработчик тика для расчета FPS и времени кадра
@@ -89,122 +349,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
   }
   
-  // Загрузка GeoJSON данных вручную
-  Future<void> loadContainerRoute() async {
-    try {
-      // Загружаем GeoJSON файл
-      const filePath = 'assets/sample-geojson/1.geojson';
-      final geoJsonString = await rootBundle.loadString(filePath);
-      final geoJson = jsonDecode(geoJsonString);
-      
-      // Временные списки для маркеров и линий
-      final List<Marker> loadedMarkers = [];
-      final List<Polyline> loadedPolylines = [];
-      
-      // Обрабатываем "features" из GeoJSON
-      final features = geoJson['features'] as List;
-      
-      for (final feature in features) {
-        final geometry = feature['geometry'] as Map<String, dynamic>;
-        final properties = feature['properties'] as Map<String, dynamic>;
-        final type = geometry['type'] as String;
-        
-        // Обрабатываем точки для создания маркеров
-        if (type == 'Point') {
-          final coordinates = geometry['coordinates'] as List;
-          final lng = coordinates[0] as num;
-          final lat = coordinates[1] as num;
-          
-          loadedMarkers.add(
-            Marker(
-              point: LatLng(lat.toDouble(), lng.toDouble()),
-              width: 60,
-              height: 70,
-              alignment: Alignment.center,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    properties['marker-symbol'] == 'harbor' 
-                        ? Icons.anchor 
-                        : Icons.directions_boat,
-                    color: _colorFromHex(properties['marker-color']?.toString() ?? '#3bb2d0'),
-                    size: 25,
-                  ),
-                  const SizedBox(height: 2),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      properties['name']?.toString() ?? '',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        
-        // Обрабатываем линии
-        else if (type == 'LineString') {
-          final coordinates = geometry['coordinates'] as List;
-          final List<LatLng> points = [];
-          
-          for (final coord in coordinates) {
-            final lng = (coord[0] as num).toDouble();
-            final lat = (coord[1] as num).toDouble();
-            points.add(LatLng(lat, lng));
-          }
-          
-          // Определяем стиль линии по свойствам
-          final strokeWidth = double.tryParse(properties['stroke-width']?.toString() ?? '2.0') ?? 2.0;
-          final color = _colorFromHex(properties['stroke']?.toString() ?? '#3388ff');
-          final bool isDashed = properties['dash-array'] != null;
-          
-          // Создаем полилинию с или без паттерна в зависимости от isDashed
-          if (isDashed) {
-            loadedPolylines.add(
-              Polyline(
-                points: points,
-                strokeWidth: strokeWidth,
-                color: color,
-                pattern: const StrokePattern.dotted(),
-              ),
-            );
-          } else {
-            loadedPolylines.add(
-              Polyline(
-                points: points,
-                strokeWidth: strokeWidth,
-                color: color,
-              ),
-            );
-          }
-        }
-      }
-      
-      // Обновляем state с загруженными данными
-      setState(() {
-        markers = loadedMarkers;
-        polylines = loadedPolylines;
-        isLoading = false;
-        error = null;
-      });
-      
-    } catch (e) {
-      setState(() {
-        isLoading = false;
-        error = 'Ошибка загрузки данных: $e';
-      });
-      print('Error loading GeoJSON: $e');
-    }
-  }
-  
   // Вспомогательный метод для парсинга hex-цвета
   Color _colorFromHex(String hexString) {
     final buffer = StringBuffer();
@@ -215,6 +359,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    // Сортируем список маршрутов при необходимости
+    final displayedRoutes = List<String>.from(_routeNames)
+      ..sort((a, b) => _sortRoutesReverseOrder ? b.compareTo(a) : a.compareTo(b));
+      
     return Scaffold(
       drawer: const MenuDrawer(HomePage.route),
       body: Stack(
@@ -224,11 +372,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               initialCenter: LatLng(10.0, 115.0),
               initialZoom: 4,
             ),
+            mapController: _mapController,
             children: [
               openStreetMapTileLayer,
               // Отображаем индикатор загрузки или сообщение об ошибке
               if (isLoading)
-                const Center(child: CircularProgressIndicator())
+                _buildLoadingIndicator()
               else if (error != null)
                 Center(child: Text(error!))
               else ...[
@@ -268,7 +417,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             child: _buildPerformanceOverlay(),
           ),
           
-          // Кнопка для показа/скрытия панели управления слоями (переносим в нижний левый угол)
+          // Кнопка для показа/скрытия панели управления слоями
           Positioned(
             left: 16,
             bottom: 16,
@@ -299,9 +448,10 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             Positioned(
               left: 16,
               bottom: 70,
-              width: 280, // Фиксированная ширина для панели
+              width: 300, // Увеличиваем ширину для большего комфорта
+              height: MediaQuery.of(context).size.height * 0.7, // Ограничиваем высоту
               child: SafeArea(
-                child: _buildLayersPanel(),
+                child: _buildLayersPanel(displayedRoutes),
               ),
             ),
           
@@ -311,8 +461,63 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
   
+  // Виджет для отображения прогресса загрузки
+  Widget _buildLoadingIndicator() {
+    final progress = _totalRoutes > 0 ? _loadedRoutes / _totalRoutes : 0.0;
+    
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.7),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(
+              'Загрузка маршрутов',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            if (_currentLoadingRoute.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Загружается: $_currentLoadingRoute',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: progress,
+              backgroundColor: Colors.grey[700],
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Загружено $_loadedRoutes из $_totalRoutes',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
   // Построение панели управления слоями
-  Widget _buildLayersPanel() {
+  Widget _buildLayersPanel(List<String> displayedRoutes) {
     return Material(
       elevation: 4,
       borderRadius: BorderRadius.circular(8),
@@ -405,10 +610,187 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
               ],
             ),
+            
+            if (_routeNames.isNotEmpty) ...[
+              const Divider(),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Выбор маршрутов',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Кнопка сортировки
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _sortRoutesReverseOrder = !_sortRoutesReverseOrder;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Icon(
+                            _sortRoutesReverseOrder 
+                                ? Icons.sort : Icons.sort,
+                            size: 16,
+                            color: Colors.grey[700],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Все', style: TextStyle(fontSize: 12)),
+                      Switch(
+                        value: _allRoutesVisible,
+                        onChanged: toggleAllRoutes,
+                        activeColor: Colors.blue,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              
+              // Кнопка для просмотра всех маршрутов
+              GestureDetector(
+                onTap: centerOnAllRoutes,
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: Colors.blue.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.map,
+                        size: 16,
+                        color: Colors.blue,
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Показать все маршруты',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.blue,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              
+              // Информация о количестве маршрутов
+              Text(
+                'Всего маршрутов: ${_routeNames.length}',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // Контейнер со скроллом для большого количества маршрутов
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: displayedRoutes.length,
+                  itemBuilder: (context, index) {
+                    final routeName = displayedRoutes[index];
+                    final routeColor = _getRouteColor(routeName);
+                    
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 12,
+                                  height: 12,
+                                  decoration: BoxDecoration(
+                                    color: routeColor,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Маршрут $routeName',
+                                    style: const TextStyle(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _routeVisibility[routeName] ?? true,
+                            activeColor: routeColor,
+                            onChanged: (value) {
+                              setState(() {
+                                _routeVisibility[routeName] = value;
+                              });
+                              updateVisibleMarkersAndPolylines();
+                            },
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
+  }
+  
+  // Получение цвета для маршрута на основе его имени
+  Color _getRouteColor(String routeName) {
+    // Генерируем цвет на основе хеша имени маршрута для уникальности
+    final hash = routeName.hashCode;
+    final r = (hash & 0xFF0000) >> 16;
+    final g = (hash & 0x00FF00) >> 8;
+    final b = hash & 0x0000FF;
+    
+    // Обеспечиваем минимальную яркость цвета
+    final minBrightness = 100; // Минимальная яркость 0-255
+    final brightness = (r * 0.299 + g * 0.587 + b * 0.114).round();
+    
+    if (brightness < minBrightness) {
+      // Если цвет слишком тёмный, осветляем
+      const factor = 1.5;
+      return Color.fromARGB(
+        255,
+        (r * factor).clamp(0, 255).round(),
+        (g * factor).clamp(0, 255).round(),
+        (b * factor).clamp(0, 255).round(),
+      );
+    }
+    
+    return Color.fromARGB(255, r, g, b);
   }
   
   // Построение виджета с информацией о производительности
@@ -465,6 +847,128 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         },
       );
     }
+  }
+
+  // Включение/выключение всех маршрутов
+  void toggleAllRoutes(bool value) {
+    setState(() {
+      _allRoutesVisible = value;
+      for (final routeName in _routeNames) {
+        _routeVisibility[routeName] = value;
+      }
+    });
+    updateVisibleMarkersAndPolylines();
+  }
+
+  // Вычисление границ маршрута
+  LatLngBounds? calculateRouteBounds(String routeName) {
+    final markers = _routeMarkers[routeName] ?? [];
+    final polylines = _routePolylines[routeName] ?? [];
+    
+    if (markers.isEmpty && polylines.isEmpty) {
+      return null;
+    }
+    
+    List<LatLng> points = [];
+    
+    // Добавляем точки из маркеров
+    for (final marker in markers) {
+      points.add(marker.point);
+    }
+    
+    // Добавляем точки из полилиний
+    for (final polyline in polylines) {
+      points.addAll(polyline.points);
+    }
+    
+    if (points.isEmpty) {
+      return null;
+    }
+    
+    // Находим крайние точки для определения границ
+    double minLat = points.first.latitude;
+    double maxLat = points.first.latitude;
+    double minLng = points.first.longitude;
+    double maxLng = points.first.longitude;
+    
+    for (var i = 1; i < points.length; i++) {
+      final point = points[i];
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+    
+    return LatLngBounds(
+      LatLng(minLat, minLng),
+      LatLng(maxLat, maxLng),
+    );
+  }
+  
+  // Центрирование карты на маршруте
+  void centerOnRoute(String routeName) {
+    final bounds = calculateRouteBounds(routeName);
+    if (bounds != null) {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: const EdgeInsets.all(50),
+        ),
+      );
+    }
+  }
+
+  // Центрирование карты на всех маршрутах
+  void centerOnAllRoutes() {
+    // Собираем все точки из всех видимых маршрутов
+    List<LatLng> allPoints = [];
+    
+    for (final routeName in _routeNames) {
+      if (_routeVisibility[routeName] == true) {
+        final markers = _routeMarkers[routeName] ?? [];
+        final polylines = _routePolylines[routeName] ?? [];
+        
+        // Добавляем точки из маркеров
+        for (final marker in markers) {
+          allPoints.add(marker.point);
+        }
+        
+        // Добавляем точки из полилиний
+        for (final polyline in polylines) {
+          allPoints.addAll(polyline.points);
+        }
+      }
+    }
+    
+    if (allPoints.isEmpty) {
+      return;
+    }
+    
+    // Находим крайние точки для определения границ
+    double minLat = allPoints.first.latitude;
+    double maxLat = allPoints.first.latitude;
+    double minLng = allPoints.first.longitude;
+    double maxLng = allPoints.first.longitude;
+    
+    for (var i = 1; i < allPoints.length; i++) {
+      final point = allPoints[i];
+      if (point.latitude < minLat) minLat = point.latitude;
+      if (point.latitude > maxLat) maxLat = point.latitude;
+      if (point.longitude < minLng) minLng = point.longitude;
+      if (point.longitude > maxLng) maxLng = point.longitude;
+    }
+    
+    final bounds = LatLngBounds(
+      LatLng(minLat, minLng),
+      LatLng(maxLat, maxLng),
+    );
+    
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(50),
+      ),
+    );
   }
 }
 

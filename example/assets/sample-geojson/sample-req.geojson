@@ -1,0 +1,79 @@
+{
+"type": "FeatureCollection",
+"features": [
+{
+"type": "Feature",
+"properties": {
+"point": "departurePort",
+"name": "Singapore"
+},
+"geometry": {
+"type": "Point",
+"coordinates": [
+103.85,
+1.29
+]
+}
+},
+{
+"type": "Feature",
+"properties": {
+"point": "intermediatePort1",
+"sequenceNumber": 1,
+"name": "Manila"
+},
+"geometry": {
+"type": "Point",
+"coordinates": [
+120.98,
+14.58
+]
+}
+},
+{
+"type": "Feature",
+"properties": {
+"point": "destinationPort",
+"name": "Hong Kong"
+},
+"geometry": {
+"type": "Point",
+"coordinates": [
+114.17,
+22.28
+]
+}
+},
+{
+"type": "Feature",
+"properties": {
+"point": "currentPosition",
+"name": "Current Container Position"
+},
+"geometry": {
+"type": "Point",
+"coordinates": [
+108.00,
+12.00
+]
+}
+}
+],
+"resolution": 100,
+"closeDistanceThreshold": 50,
+"allowSuez": true,
+"allowPanama": true,
+"allowMalacca": true,
+"allowGibraltar": true,
+"allowDover": true,
+"allowBering": true,
+"allowMagellan": true,
+"allowBabelmandeb": true,
+"allowKiel": true,
+"allowCorinth": true,
+"allowNorthwest": true,
+"allowNortheast": true,
+"smoothRoute": true,
+"smoothIterations": 1,
+"smoothFactor": 0.5
+}
