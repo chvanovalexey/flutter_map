@@ -85,3 +85,6 @@ coverage/
 /example/windows
 /example/windows/flutter
 /example/windows
+/example/android
+/example/ios
+/example/windows

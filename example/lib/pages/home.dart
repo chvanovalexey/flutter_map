@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
+import 'dart:async';
 
 class HomePage extends StatefulWidget {
   static const String route = '/';
@@ -42,6 +43,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   bool _showLinesLayer = true;
   bool _showLayersPanel = false;
   
+  // Переменные для debouncing слоев
+  double _markersDebounceMs = 0;
+  double _linesDebounceMs = 0;
+  bool _useMarkersDebounce = false;
+  bool _useLinesDebounce = false;
+  bool _applyMarkersDebounceOnZoom = false;
+  bool _applyLinesDebounceOnZoom = false;
+  List<Marker> _allMarkers = []; // Временное хранилище для всех маркеров
+  List<Polyline> _allPolylines = []; // Временное хранилище для всех полилиний
+  Timer? _markersDebounceTimer;
+  Timer? _linesDebounceTimer;
+  
   // Информация о загруженных маршрутах
   final Map<String, bool> _routeVisibility = {};
   final Map<String, List<Marker>> _routeMarkers = {};
@@ -71,12 +84,17 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Инициализация тикера для отслеживания производительности
     _stopwatch.start();
     _ticker = createTicker(_onTick)..start();
+    
+    // Добавляем слушатель изменений камеры для применения debouncing
+    _mapController.mapEventStream.listen(_handleMapEvent);
   }
   
   @override
   void dispose() {
     _ticker.dispose();
     _stopwatch.stop();
+    _markersDebounceTimer?.cancel();
+    _linesDebounceTimer?.cancel();
     super.dispose();
   }
   
@@ -152,6 +170,61 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     }
   }
   
+  // Обработчик событий карты для debouncing
+  void _handleMapEvent(MapEvent event) {
+    // Обновляем маркеры с debouncing
+    if (_useMarkersDebounce) {
+      bool shouldApplyDebounce = false;
+      
+      // Проверяем тип события и соответствующие настройки
+      if (event is MapEventMove) {
+        shouldApplyDebounce = true;
+      } else if (_applyMarkersDebounceOnZoom && 
+                (event is MapEventDoubleTapZoomStart || 
+                 event is MapEventScrollWheelZoom ||
+                 event is MapEventFlingAnimation)) {
+        shouldApplyDebounce = true;
+      }
+      
+      if (shouldApplyDebounce) {
+        _markersDebounceTimer?.cancel();
+        _markersDebounceTimer = Timer(
+          Duration(milliseconds: _markersDebounceMs.toInt()),
+          () {
+            if (mounted) setState(() => markers = _allMarkers);
+          },
+        );
+        if (mounted && markers.isNotEmpty) setState(() => markers = []);
+      }
+    }
+    
+    // Обновляем линии с debouncing
+    if (_useLinesDebounce) {
+      bool shouldApplyDebounce = false;
+      
+      // Проверяем тип события и соответствующие настройки
+      if (event is MapEventMove) {
+        shouldApplyDebounce = true;
+      } else if (_applyLinesDebounceOnZoom && 
+                (event is MapEventDoubleTapZoomStart || 
+                 event is MapEventScrollWheelZoom ||
+                 event is MapEventFlingAnimation)) {
+        shouldApplyDebounce = true;
+      }
+      
+      if (shouldApplyDebounce) {
+        _linesDebounceTimer?.cancel();
+        _linesDebounceTimer = Timer(
+          Duration(milliseconds: _linesDebounceMs.toInt()),
+          () {
+            if (mounted) setState(() => polylines = _allPolylines);
+          },
+        );
+        if (mounted && polylines.isNotEmpty) setState(() => polylines = []);
+      }
+    }
+  }
+  
   // Обновление общих списков маркеров и линий на основе видимости маршрутов
   void updateVisibleMarkersAndPolylines() {
     final List<Marker> allMarkers = [];
@@ -170,9 +243,35 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     // Обновляем состояние общей видимости
     _allRoutesVisible = anyRouteVisible;
     
+    // Сохраняем полные списки для debouncing
+    _allMarkers = allMarkers;
+    _allPolylines = allPolylines;
+    
     setState(() {
-      markers = allMarkers;
-      polylines = allPolylines;
+      // Применяем списки в зависимости от статуса debouncing
+      markers = _useMarkersDebounce ? [] : allMarkers;
+      polylines = _useLinesDebounce ? [] : allPolylines;
+      
+      // Запускаем таймеры для отложенной загрузки
+      if (_useMarkersDebounce) {
+        _markersDebounceTimer?.cancel();
+        _markersDebounceTimer = Timer(
+          Duration(milliseconds: _markersDebounceMs.toInt()),
+          () {
+            if (mounted) setState(() => markers = _allMarkers);
+          },
+        );
+      }
+      
+      if (_useLinesDebounce) {
+        _linesDebounceTimer?.cancel();
+        _linesDebounceTimer = Timer(
+          Duration(milliseconds: _linesDebounceMs.toInt()),
+          () {
+            if (mounted) setState(() => polylines = _allPolylines);
+          },
+        );
+      }
     });
   }
   
@@ -449,9 +548,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               left: 16,
               bottom: 70,
               width: 300, // Увеличиваем ширину для большего комфорта
-              height: MediaQuery.of(context).size.height * 0.7, // Ограничиваем высоту
-              child: SafeArea(
-                child: _buildLayersPanel(displayedRoutes),
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(8),
+                color: Colors.white,
+                child: Container(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.7,
+                  ),
+                  child: _buildLayersPanel(displayedRoutes),
+                ),
               ),
             ),
           
@@ -518,22 +624,31 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   
   // Построение панели управления слоями
   Widget _buildLayersPanel(List<String> displayedRoutes) {
-    return Material(
-      elevation: 4,
-      borderRadius: BorderRadius.circular(8),
-      color: Colors.white,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Управление слоями',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Управление слоями',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => setState(() => _showLayersPanel = false),
+                ),
+              ],
             ),
             const Divider(),
             
@@ -567,11 +682,129 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onChanged: (value) {
                     setState(() {
                       _showMarkersLayer = value;
+                      // Если слой включаем, и был активен debouncing, применяем его
+                      if (value && _useMarkersDebounce) {
+                        markers = [];
+                        _markersDebounceTimer?.cancel();
+                        _markersDebounceTimer = Timer(
+                          Duration(milliseconds: _markersDebounceMs.toInt()),
+                          () {
+                            if (mounted) setState(() => markers = _allMarkers);
+                          },
+                        );
+                      }
                     });
                   },
                 ),
               ],
             ),
+            
+            // Добавляем настройки debouncing для маркеров
+            if (_showMarkersLayer)
+              Padding(
+                padding: const EdgeInsets.only(left: 32, top: 4, bottom: 8, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Tooltip(
+                          message: 'Скрывает маркеры при перемещении карты и показывает их с заданной задержкой после остановки. Улучшает производительность.',
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Debouncing маркеров',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _useMarkersDebounce,
+                          activeColor: Colors.blue,
+                          onChanged: (value) {
+                            setState(() {
+                              _useMarkersDebounce = value;
+                            });
+                            updateVisibleMarkersAndPolylines();
+                          },
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                    if (_useMarkersDebounce)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Задержка обновления маркеров:',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Slider(
+                                  value: _markersDebounceMs,
+                                  min: 0,
+                                  max: 500,
+                                  divisions: 50,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _markersDebounceMs = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                              Text(
+                                '${_markersDebounceMs.toInt()} мс',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          
+                          // Переключатель для применения debouncing при зуме
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Tooltip(
+                                message: 'Активирует debouncing при масштабировании карты (колесо мыши, двойной тап, жесты масштабирования)',
+                                child: Row(
+                                  children: [
+                                    const Text(
+                                      'Применять при зуме',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _applyMarkersDebounceOnZoom,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _applyMarkersDebounceOnZoom = value;
+                                  });
+                                },
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
             
             const SizedBox(height: 8),
             
@@ -605,11 +838,129 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   onChanged: (value) {
                     setState(() {
                       _showLinesLayer = value;
+                      // Если слой включаем, и был активен debouncing, применяем его
+                      if (value && _useLinesDebounce) {
+                        polylines = [];
+                        _linesDebounceTimer?.cancel();
+                        _linesDebounceTimer = Timer(
+                          Duration(milliseconds: _linesDebounceMs.toInt()),
+                          () {
+                            if (mounted) setState(() => polylines = _allPolylines);
+                          },
+                        );
+                      }
                     });
                   },
                 ),
               ],
             ),
+            
+            // Добавляем настройки debouncing для линий
+            if (_showLinesLayer)
+              Padding(
+                padding: const EdgeInsets.only(left: 32, top: 4, bottom: 8, right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Tooltip(
+                          message: 'Скрывает линии маршрутов при перемещении карты и показывает их с заданной задержкой после остановки. Улучшает производительность.',
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Debouncing маршрутов',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                              Icon(
+                                Icons.info_outline,
+                                size: 16,
+                                color: Colors.grey[600],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _useLinesDebounce,
+                          activeColor: Colors.blue,
+                          onChanged: (value) {
+                            setState(() {
+                              _useLinesDebounce = value;
+                            });
+                            updateVisibleMarkersAndPolylines();
+                          },
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ],
+                    ),
+                    if (_useLinesDebounce)
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Задержка обновления маршрутов:',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Slider(
+                                  value: _linesDebounceMs,
+                                  min: 0,
+                                  max: 500,
+                                  divisions: 50,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _linesDebounceMs = value;
+                                    });
+                                  },
+                                ),
+                              ),
+                              Text(
+                                '${_linesDebounceMs.toInt()} мс',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                          
+                          // Переключатель для применения debouncing при зуме
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Tooltip(
+                                message: 'Активирует debouncing при масштабировании карты (колесо мыши, двойной тап, жесты масштабирования)',
+                                child: Row(
+                                  children: [
+                                    const Text(
+                                      'Применять при зуме',
+                                      style: TextStyle(fontSize: 12),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.info_outline,
+                                      size: 14,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Switch(
+                                value: _applyLinesDebounceOnZoom,
+                                onChanged: (value) {
+                                  setState(() {
+                                    _applyLinesDebounceOnZoom = value;
+                                  });
+                                },
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
             
             if (_routeNames.isNotEmpty) ...[
               const Divider(),
@@ -708,7 +1059,12 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
               const SizedBox(height: 8),
               
               // Контейнер со скроллом для большого количества маршрутов
-              Expanded(
+              Container(
+                height: 150, // Фиксированная высота для списка маршрутов
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.withOpacity(0.3)),
+                  borderRadius: BorderRadius.circular(4),
+                ),
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: displayedRoutes.length,

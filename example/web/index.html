@@ -28,6 +28,21 @@
   <meta name="apple-mobile-web-app-title" content="flutter_map Demo">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
+  <!-- Mapbox GL JS -->
+  <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+  
+  <!-- Проверка загрузки Mapbox GL JS -->
+  <script>
+    window.addEventListener('load', function() {
+      if (typeof mapboxgl !== 'undefined') {
+        console.log('Mapbox GL JS успешно загружен, версия:', mapboxgl.version);
+      } else {
+        console.error('ОШИБКА: Mapbox GL JS не загружен!');
+      }
+    });
+  </script>
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png" />
 

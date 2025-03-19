@@ -16,6 +16,7 @@ import 'package:flutter_map_example/pages/many_circles.dart';
 import 'package:flutter_map_example/pages/many_markers.dart';
 import 'package:flutter_map_example/pages/map_controller.dart';
 import 'package:flutter_map_example/pages/map_inside_listview.dart';
+import 'package:flutter_map_example/pages/mapbox_page.dart';
 import 'package:flutter_map_example/pages/markers.dart';
 import 'package:flutter_map_example/pages/multi_worlds.dart';
 import 'package:flutter_map_example/pages/overlay_image.dart';
@@ -79,6 +80,12 @@ class MenuDrawer extends StatelessWidget {
             routeName: HomePage.route,
             currentRoute: currentRoute,
             icon: const Icon(Icons.home),
+          ),
+          MenuItemWidget(
+            caption: 'Mapbox GL',
+            routeName: MapboxPage.route,
+            currentRoute: currentRoute,
+            icon: const Icon(Icons.map),
           ),
           const Divider(),
           MenuItemWidget(
